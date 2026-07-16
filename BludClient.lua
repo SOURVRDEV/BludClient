@@ -11,7 +11,8 @@ local player = Players.LocalPlayer
 local settings = {
 	highlightColor = Color3.fromRGB(255, 0, 0),
 	outlineColor = Color3.fromRGB(255, 255, 0),
-	flySpeed = 50
+	flySpeed = 50,
+	speedMultiplier = 2
 }
 
 ----------------------------------------------------------------
@@ -149,6 +150,57 @@ UserInputService.InputEnded:Connect(function(input, gameProcessed)
 end)
 
 ----------------------------------------------------------------
+-- SPEED BOOST FUNCTION
+----------------------------------------------------------------
+local speedBoostEnabled = false
+local baseWalkSpeed = 16 -- Roblox default
+
+local function getHumanoid()
+	local character = player.Character
+	if not character then return nil end
+	return character:FindFirstChildOfClass("Humanoid")
+end
+
+local function applySpeedBoost()
+	local humanoid = getHumanoid()
+	if humanoid then
+		humanoid.WalkSpeed = baseWalkSpeed * settings.speedMultiplier
+	end
+end
+
+local function removeSpeedBoost()
+	local humanoid = getHumanoid()
+	if humanoid then
+		humanoid.WalkSpeed = baseWalkSpeed
+	end
+end
+
+local function toggleSpeedBoost()
+	speedBoostEnabled = not speedBoostEnabled
+	if speedBoostEnabled then
+		applySpeedBoost()
+	else
+		removeSpeedBoost()
+	end
+end
+
+-- Reapply speed boost on respawn if it's still toggled on
+player.CharacterAdded:Connect(function(character)
+	local humanoid = character:WaitForChild("Humanoid")
+	baseWalkSpeed = humanoid.WalkSpeed
+	if speedBoostEnabled then
+		humanoid.WalkSpeed = baseWalkSpeed * settings.speedMultiplier
+	end
+end)
+
+if player.Character then
+	local humanoid = player.Character:FindFirstChildOfClass("Humanoid")
+	if humanoid then
+		baseWalkSpeed = humanoid.WalkSpeed
+	end
+end
+
+----------------------------------------------------------------
 -- GUI SETUP
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
@@ -161,7 +213,7 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 ----------------------------------------------------------------
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 220, 0, 190)
+frame.Size = UDim2.new(0, 220, 0, 245)
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
@@ -222,7 +274,7 @@ minimizeCorner.Parent = minimizeButton
 
 local content = Instance.new("Frame")
 content.Name = "Content"
-content.Size = UDim2.new(1, -20, 0, 130)
+content.Size = UDim2.new(1, -20, 0, 185)
 content.Position = UDim2.new(0, 10, 0, 50)
 content.BackgroundTransparency = 1
 content.ZIndex = 2
@@ -301,11 +353,17 @@ flyButton.MouseButton1Click:Connect(function()
 	end
 end)
 
+local speedBoostButton = createButton("Speed Boost: OFF", 3)
+speedBoostButton.MouseButton1Click:Connect(function()
+	toggleSpeedBoost()
+	speedBoostButton.Text = speedBoostEnabled and "Speed Boost: ON" or "Speed Boost: OFF"
+end)
+
 ----------------------------------------------------------------
 -- MINIMIZE LOGIC
 ----------------------------------------------------------------
 local minimized = false
-local expandedSize = UDim2.new(0, 220, 0, 190)
+local expandedSize = UDim2.new(0, 220, 0, 245)
 local minimizedSize = UDim2.new(0, 220, 0, 40)
 
 minimizeButton.MouseButton1Click:Connect(function()
@@ -571,15 +629,36 @@ local flyPopup = createSettingsPopup("Fly Settings", {
 })
 
 ----------------------------------------------------------------
+-- SPEED BOOST SETTINGS POPUP
+----------------------------------------------------------------
+local speedPopup = createSettingsPopup("Speed Boost Settings", {
+	{
+		label = "Multiplier",
+		default = settings.speedMultiplier,
+		min = 0.1, max = 20,
+		callback = function(val)
+			settings.speedMultiplier = val
+			if speedBoostEnabled then applySpeedBoost() end
+		end
+	}
+})
+
+----------------------------------------------------------------
 -- RIGHT-CLICK HANDLERS TO OPEN POPUPS NEXT TO THEIR BUTTON
 ----------------------------------------------------------------
+local allPopups = {highlightPopup, flyPopup, speedPopup}
+
 local function openPopupNear(popup, button)
 	-- Position popup to the right of the main frame, aligned with the button
 	local absPos = frame.Position
 	popup.Position = UDim2.new(0, absPos.X.Offset + 230, 0, absPos.Y.Offset + button.Position.Y.Offset + 50)
 	popup.Visible = true
-	-- Close the other popup if open
-	if popup == highlightPopup then flyPopup.Visible = false else highlightPopup.Visible = false end
+	-- Close all other popups
+	for _, p in ipairs(allPopups) do
+		if p ~= popup then
+			p.Visible = false
+		end
+	end
 end
 
 highlightButton.InputBegan:Connect(function(input)
@@ -591,5 +670,11 @@ end)
 flyButton.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		openPopupNear(flyPopup, flyButton)
+	end
+end)
+
+speedBoostButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		openPopupNear(speedPopup, speedBoostButton)
 	end
 end)
