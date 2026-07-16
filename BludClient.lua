@@ -10,7 +10,7 @@ local player = Players.LocalPlayer
 ----------------------------------------------------------------
 local settings = {
 	highlightColor = Color3.fromRGB(255, 0, 0),
-	outlineColor = Color3.fromRGB(255, 255, 0),
+	outlineColor = Color3.fromRGB(0, 0, 0),
 	flySpeed = 50,
 	speedMultiplier = 2
 }
