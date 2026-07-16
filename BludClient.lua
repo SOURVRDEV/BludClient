@@ -12,7 +12,8 @@ local settings = {
 	highlightColor = Color3.fromRGB(255, 0, 0),
 	outlineColor = Color3.fromRGB(0, 0, 0),
 	flySpeed = 50,
-	speedMultiplier = 2
+	speedMultiplier = 2,
+	tracerColor = Color3.fromRGB(0, 255, 0) -- default green
 }
 
 ----------------------------------------------------------------
@@ -69,6 +70,123 @@ for _, p in ipairs(Players:GetPlayers()) do
 			applyHighlight(character)
 		end
 	end)
+end
+
+----------------------------------------------------------------
+-- TRACERS TOGGLE
+----------------------------------------------------------------
+local tracersEnabled = false
+local tracerFrames = {}
+local tracerUpdateConnection = nil
+
+local function createTracerFrame()
+	local frame = Instance.new("Frame")
+	frame.Name = "TracerLine"
+	frame.BorderSizePixel = 0
+	frame.BackgroundColor3 = settings.tracerColor
+	frame.AnchorPoint = Vector2.new(0, 0.5)
+	frame.ZIndex = 1
+	frame.Parent = screenGui -- Will be set after screenGui is created
+	return frame
+end
+
+local function updateTracers()
+	if not tracersEnabled then return end
+	
+	local camera = workspace.CurrentCamera
+	if not camera then return end
+	
+	local viewportSize = camera.ViewportSize
+	local startPos = Vector2.new(viewportSize.X / 2, viewportSize.Y) -- Bottom center
+	
+	for _, targetPlayer in ipairs(Players:GetPlayers()) do
+		if targetPlayer == player then continue end
+		
+		local character = targetPlayer.Character
+		if not character then
+			if tracerFrames[targetPlayer] then
+				tracerFrames[targetPlayer].Visible = false
+			end
+			continue
+		end
+		
+		local hrp = character:FindFirstChild("HumanoidRootPart")
+		if not hrp then
+			if tracerFrames[targetPlayer] then
+				tracerFrames[targetPlayer].Visible = false
+			end
+			continue
+		end
+		
+		local worldPos = hrp.Position
+		local screenPos, onScreen = camera:WorldToViewportPoint(worldPos)
+		
+		if not onScreen then
+			if tracerFrames[targetPlayer] then
+				tracerFrames[targetPlayer].Visible = false
+			end
+			continue
+		end
+		
+		local endPos = Vector2.new(screenPos.X, screenPos.Y)
+		local delta = endPos - startPos
+		local distance = delta.Magnitude
+		
+		if distance < 5 then
+			if tracerFrames[targetPlayer] then
+				tracerFrames[targetPlayer].Visible = false
+			end
+			continue
+		end
+		
+		local tracerFrame = tracerFrames[targetPlayer]
+		if not tracerFrame then
+			tracerFrame = createTracerFrame()
+			tracerFrames[targetPlayer] = tracerFrame
+		end
+		
+		local angle = math.atan2(delta.Y, delta.X)
+		
+		tracerFrame.Size = UDim2.new(0, distance, 0, 2)
+		tracerFrame.Position = UDim2.new(0, startPos.X, 0, startPos.Y)
+		tracerFrame.Rotation = math.deg(angle)
+		tracerFrame.BackgroundColor3 = settings.tracerColor
+		tracerFrame.Visible = true
+	end
+	
+	-- Cleanup disconnected players
+	for targetPlayer, frame in pairs(tracerFrames) do
+		if not Players:FindFirstChild(targetPlayer.Name) then
+			frame:Destroy()
+			tracerFrames[targetPlayer] = nil
+		end
+	end
+end
+
+local function enableTracers()
+	tracersEnabled = true
+	if tracerUpdateConnection then tracerUpdateConnection:Disconnect() end
+	tracerUpdateConnection = RunService.RenderStepped:Connect(updateTracers)
+end
+
+local function disableTracers()
+	tracersEnabled = false
+	if tracerUpdateConnection then
+		tracerUpdateConnection:Disconnect()
+		tracerUpdateConnection = nil
+	end
+	for _, frame in pairs(tracerFrames) do
+		frame:Destroy()
+	end
+	tracerFrames = {}
+end
+
+local function toggleTracers()
+	if tracersEnabled then
+		disableTracers()
+	else
+		enableTracers()
+	end
 end
 
 ----------------------------------------------------------------
@@ -213,7 +331,7 @@ screenGui.Parent = player:WaitForChild("PlayerGui")
 ----------------------------------------------------------------
 local frame = Instance.new("Frame")
 frame.Name = "MainFrame"
-frame.Size = UDim2.new(0, 220, 0, 245)
+frame.Size = UDim2.new(0, 220, 0, 300) -- Increased height for new button
 frame.Position = UDim2.new(0, 20, 0, 20)
 frame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
 frame.BorderSizePixel = 0
@@ -274,7 +392,7 @@ minimizeCorner.Parent = minimizeButton
 
 local content = Instance.new("Frame")
 content.Name = "Content"
-content.Size = UDim2.new(1, -20, 0, 185)
+content.Size = UDim2.new(1, -20, 0, 240) -- Increased height
 content.Position = UDim2.new(0, 10, 0, 50)
 content.BackgroundTransparency = 1
 content.ZIndex = 2
@@ -342,7 +460,13 @@ highlightButton.MouseButton1Click:Connect(function()
 	highlightButton.Text = highlightEnabled and "Highlight: ON" or "Highlight: OFF"
 end)
 
-local flyButton = createButton("Fly: OFF", 2)
+local tracersButton = createButton("Tracers: OFF", 2)
+tracersButton.MouseButton1Click:Connect(function()
+	toggleTracers()
+	tracersButton.Text = tracersEnabled and "Tracers: ON" or "Tracers: OFF"
+end)
+
+local flyButton = createButton("Fly: OFF", 3)
 flyButton.MouseButton1Click:Connect(function()
 	if flying then
 		stopFly()
@@ -353,7 +477,7 @@ flyButton.MouseButton1Click:Connect(function()
 	end
 end)
 
-local speedBoostButton = createButton("Speed Boost: OFF", 3)
+local speedBoostButton = createButton("Speed Boost: OFF", 4)
 speedBoostButton.MouseButton1Click:Connect(function()
 	toggleSpeedBoost()
 	speedBoostButton.Text = speedBoostEnabled and "Speed Boost: ON" or "Speed Boost: OFF"
@@ -363,7 +487,7 @@ end)
 -- MINIMIZE LOGIC
 ----------------------------------------------------------------
 local minimized = false
-local expandedSize = UDim2.new(0, 220, 0, 245)
+local expandedSize = UDim2.new(0, 220, 0, 300)
 local minimizedSize = UDim2.new(0, 220, 0, 40)
 
 minimizeButton.MouseButton1Click:Connect(function()
@@ -615,6 +739,36 @@ local highlightPopup = createSettingsPopup("Highlight Settings", {
 })
 
 ----------------------------------------------------------------
+-- TRACERS SETTINGS POPUP
+----------------------------------------------------------------
+local tracersPopup = createSettingsPopup("Tracers Settings", {
+	{
+		label = "Line R",
+		default = math.floor(settings.tracerColor.R * 255),
+		min = 0, max = 255,
+		callback = function(val)
+			settings.tracerColor = Color3.fromRGB(val, settings.tracerColor.G * 255, settings.tracerColor.B * 255)
+		end
+	},
+	{
+		label = "Line G",
+		default = math.floor(settings.tracerColor.G * 255),
+		min = 0, max = 255,
+		callback = function(val)
+			settings.tracerColor = Color3.fromRGB(settings.tracerColor.R * 255, val, settings.tracerColor.B * 255)
+		end
+	},
+	{
+		label = "Line B",
+		default = math.floor(settings.tracerColor.B * 255),
+		min = 0, max = 255,
+		callback = function(val)
+			settings.tracerColor = Color3.fromRGB(settings.tracerColor.R * 255, settings.tracerColor.G * 255, val)
+		end
+	}
+})
+
+----------------------------------------------------------------
 -- FLY SETTINGS POPUP
 ----------------------------------------------------------------
 local flyPopup = createSettingsPopup("Fly Settings", {
@@ -646,7 +800,7 @@ local speedPopup = createSettingsPopup("Speed Boost Settings", {
 ----------------------------------------------------------------
 -- RIGHT-CLICK HANDLERS TO OPEN POPUPS NEXT TO THEIR BUTTON
 ----------------------------------------------------------------
-local allPopups = {highlightPopup, flyPopup, speedPopup}
+local allPopups = {highlightPopup, tracersPopup, flyPopup, speedPopup}
 
 local function openPopupNear(popup, button)
 	-- Position popup to the right of the main frame, aligned with the button
@@ -664,6 +818,12 @@ end
 highlightButton.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton2 then
 		openPopupNear(highlightPopup, highlightButton)
+	end
+end)
+
+tracersButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton2 then
+		openPopupNear(tracersPopup, tracersButton)
 	end
 end)
 
